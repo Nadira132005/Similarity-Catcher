@@ -1,0 +1,25 @@
+# Node
+node_modules/
+frontend/.next/
+frontend/.env*
+
+~$*.docx
+
+# Python
+backend/__pycache__/
+backend/.venv/
+backend/backend_venv/
+backend/.env*
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+backend/logs/
+*.log
+
+# Test cache
+.pytest_cache/
+*.sqlite3

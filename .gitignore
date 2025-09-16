@@ -1,0 +1,9 @@
+/node_modules
+/.next
+/out
+/.env.local
+/.env.development.local
+.env
+/database
+/chroma_db
+/backend_venv
