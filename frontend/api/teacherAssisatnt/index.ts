@@ -8,6 +8,9 @@ import {
   LIST_UPLOADED_CSVS,
   DOWNDLAD_UPLODED_CSVS,
   GENERATE_TESTS,
+  CREATE_PROJECT_FROM_PDF,
+  GET_TEACHER_PROJECTS,
+  DELETE_PROJECT,
 } from "./routeVariables";
 
 export async function auth() {
@@ -48,10 +51,13 @@ export async function compareQueries(prompt: string) {
   return (await response.json()) as ReturnedQueries;
 }
 
-export async function getUnitTestsForIssue(inquiry: string) {
+export async function getUnitTestsForIssue(inquiry: string, projectName?: string) {
   const response = await fetch(GENERATE_TESTS, {
     method: "POST",
-    body: JSON.stringify({ prompt: inquiry }),
+    body: JSON.stringify({
+      prompt: inquiry,
+      project_name: projectName || "api_files"  // Default to old behavior
+    }),
     headers: { "Content-Type": "application/json" },
   });
 
@@ -60,7 +66,7 @@ export async function getUnitTestsForIssue(inquiry: string) {
     throw new Error(errorData.error || "Server error");
   }
 
-  return (await response.json()) as { response: string };
+  return (await response.json()) as { response: string; project_name: string };
 }
 
 export async function getStatus(requestId: string) {
@@ -100,6 +106,49 @@ export async function downloadUploadedCSV(filename: string) {
   const res = await fetch(DOWNDLAD_UPLODED_CSVS + encodeURIComponent(filename));
   if (!res.ok) throw new Error("Failed to download CSV");
   return res.blob();
+}
+
+export interface TeacherProject {
+  name: string;
+  problems_count: number;
+}
+
+export async function getTeacherProjects() {
+  const response = await fetch(GET_TEACHER_PROJECTS);
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to fetch projects");
+  }
+
+  return (await response.json()) as { projects: TeacherProject[]; count: number };
+}
+
+export async function createProjectFromPDF(formData: FormData) {
+  const response = await fetch(CREATE_PROJECT_FROM_PDF, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to create project from PDF");
+  }
+
+  return await response.json();
+}
+
+export async function deleteProject(projectName: string) {
+  const response = await fetch(DELETE_PROJECT + encodeURIComponent(projectName), {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to delete project");
+  }
+
+  return await response.json();
 }
 
 // export async function getProjects() {

@@ -11,3 +11,6 @@ export const LIST_UPLOADED_CSVS = BACKEND_URL + "/list_uploaded_csvs";
 export const DOWNDLAD_UPLODED_CSVS = BACKEND_URL + "/download_uploaded_csv/";
 export const GET_PROJECTS = BACKEND_URL + "/getProjects";
 export const CREATE_PROJECT = BACKEND_URL + "/createProject";
+export const CREATE_PROJECT_FROM_PDF = BACKEND_URL + "/create-project-from-pdf";
+export const GET_TEACHER_PROJECTS = BACKEND_URL + "/get-teacher-projects";
+export const DELETE_PROJECT = BACKEND_URL + "/delete-project/";

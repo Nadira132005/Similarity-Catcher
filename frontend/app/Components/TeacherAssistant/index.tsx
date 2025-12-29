@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Modal from "../Modal/Modal";
 import CodeBox from "../Modal/CodeBox";
 import { motion } from "motion/react";
@@ -9,6 +9,10 @@ import MainBtn from "../Buttons/MainBtn";
 import {
   getUnitTestsForIssue,
   ReturnedQueries,
+  getTeacherProjects,
+  createProjectFromPDF,
+  deleteProject,
+  TeacherProject,
 } from "../../../api/teacherAssisatnt";
 const blue = "#0033A0";
 const blueLight = "#e6eaf6";
@@ -33,6 +37,31 @@ export default function TeacherAssistant() {
     id: 2,
   });
 
+  // Project management state
+  const [projects, setProjects] = useState<TeacherProject[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string>("");
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [uploadingPDF, setUploadingPDF] = useState(false);
+
+  // Load projects on mount
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  async function loadProjects() {
+    try {
+      const data = await getTeacherProjects();
+      setProjects(data.projects);
+      // Select first project by default if available
+      if (data.projects.length > 0 && !selectedProject) {
+        setSelectedProject(data.projects[0].name);
+      }
+    } catch (err: any) {
+      console.error("Failed to load projects:", err);
+    }
+  }
+
   function handleDwonload(code: string, id: number) {
     const blob = new Blob([code], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -53,6 +82,100 @@ export default function TeacherAssistant() {
     setModal(true);
   }
 
+  function handlePDFFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        setError({
+          message: "Please select a PDF file.",
+          status: true,
+          className: "bg-red-500",
+        });
+        return;
+      }
+      setPdfFile(file);
+    }
+  }
+
+  async function handleCreateProjectFromPDF(e: React.FormEvent) {
+    e.preventDefault();
+    setError({ message: "", status: false, className: "bg-red-500" });
+
+    if (!pdfFile || !newProjectName.trim()) {
+      setError({
+        message: "Please provide both PDF file and project name.",
+        status: true,
+        className: "bg-red-500",
+      });
+      return;
+    }
+
+    setUploadingPDF(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("pdf_file", pdfFile);
+      formData.append("project_name", newProjectName.trim());
+
+      const result = await createProjectFromPDF(formData);
+
+      setError({
+        message: `Project "${result.project_name}" created with ${result.problems_count} problems!`,
+        status: true,
+        className: "bg-green-500",
+      });
+
+      // Reset form
+      setPdfFile(null);
+      setNewProjectName("");
+
+      // Reload projects and select the new one
+      await loadProjects();
+      setSelectedProject(result.project_name);
+    } catch (err: any) {
+      setError({
+        message: err.message || "Failed to create project from PDF.",
+        status: true,
+        className: "bg-red-500",
+      });
+    } finally {
+      setUploadingPDF(false);
+    }
+  }
+
+  async function handleDeleteProject(projectName: string) {
+    // Confirm deletion
+    if (!window.confirm(`Are you sure you want to delete project "${projectName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setError({ message: "", status: false, className: "bg-red-500" });
+
+    try {
+      await deleteProject(projectName);
+
+      setError({
+        message: `Project "${projectName}" deleted successfully!`,
+        status: true,
+        className: "bg-green-500",
+      });
+
+      // If the deleted project was selected, clear selection
+      if (selectedProject === projectName) {
+        setSelectedProject("");
+      }
+
+      // Reload projects
+      await loadProjects();
+    } catch (err: any) {
+      setError({
+        message: err.message || "Failed to delete project.",
+        status: true,
+        className: "bg-red-500",
+      });
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError({ message: "", status: false, className: "bg-red-500" });
@@ -69,10 +192,19 @@ export default function TeacherAssistant() {
       return;
     }
 
+    if (!selectedProject) {
+      setError({
+        message: "Please select a project.",
+        status: true,
+        className: "bg-red-500",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const data = await getUnitTestsForIssue(testDescription);
+      const data = await getUnitTestsForIssue(testDescription, selectedProject);
 
       if (data.response) {
         setUnitTestMarkdown(data.response);
@@ -84,7 +216,11 @@ export default function TeacherAssistant() {
 
       console.log("Results:", data.response);
     } catch (err: any) {
-      setError(err.message || "Unknown error occurred.");
+      setError({
+        message: err.message || "Unknown error occurred.",
+        status: true,
+        className: "bg-red-500",
+      });
     } finally {
       setLoading(false);
     }
@@ -128,13 +264,116 @@ export default function TeacherAssistant() {
             </span>
             {showTooltip && (
               <div className="absolute right-0 top-10 z-10 w-64 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-sm text-gray-700 animate-fade-in">
-                Upload a test case description, and the app will automatically
-                generate C# test code using the teacher-assistant library
-                documentation.
+                Create projects from PDF files containing problems, or select
+                existing projects. Provide a test description and the app will
+                generate tests based on similar problems from the selected
+                project database.
               </div>
             )}
           </div>
         </motion.div>
+
+        {/* Project Management Section */}
+        <motion.div
+          initial={{ opacity: 0, y: -50 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, type: "spring" }}
+          className="mb-6 p-4 bg-white rounded-lg shadow-md border-2 border-accent"
+        >
+          <h2 className="text-lg font-bold mb-3" style={{ color: blue }}>
+            Project Management
+          </h2>
+
+          {/* Create New Project from PDF */}
+          <div className="mb-4 p-3 bg-blue-50 rounded">
+            <h3 className="text-sm font-semibold mb-2" style={{ color: blue }}>
+              Create New Project from PDF
+            </h3>
+            <form
+              onSubmit={handleCreateProjectFromPDF}
+              className="flex flex-col gap-2"
+            >
+              <input
+                type="text"
+                placeholder="Project name..."
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                className="rounded px-3 py-2 text-sm bg-white focus:outline-none border-2 border-gray-300 focus:border-accent"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={handlePDFFileChange}
+                  className="text-sm flex-1"
+                />
+                <button
+                  type="submit"
+                  disabled={uploadingPDF || !pdfFile || !newProjectName.trim()}
+                  className={`rounded px-4 py-2 text-sm font-semibold shadow transition ${
+                    uploadingPDF || !pdfFile || !newProjectName.trim()
+                      ? "bg-slate-200 text-gray-400 cursor-not-allowed"
+                      : "bg-blue text-white cursor-pointer hover:scale-95"
+                  }`}
+                >
+                  {uploadingPDF ? "Creating..." : "Create Project"}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Select Existing Project */}
+          <div>
+            <label className="text-sm font-semibold mb-1 block" style={{ color: blue }}>
+              Select Project
+            </label>
+            <span className="text-xs text-gray-600 mb-2 block">
+              Choose a project to generate tests from its problem database.
+            </span>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="w-full rounded px-3 py-2 bg-white focus:outline-none border-2 border-gray-300 focus:border-accent"
+            >
+              <option value="">-- Select a project --</option>
+              {projects.map((project) => (
+                <option key={project.name} value={project.name}>
+                  {project.name} ({project.problems_count} problems)
+                </option>
+              ))}
+            </select>
+
+            {/* Project List with Delete Buttons */}
+            {projects.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs font-semibold text-gray-600">Manage Projects:</p>
+                {projects.map((project) => (
+                  <div
+                    key={project.name}
+                    className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200"
+                  >
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-700">
+                        {project.name}
+                      </span>
+                      <span className="text-xs text-gray-500 ml-2">
+                        ({project.problems_count} problems)
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteProject(project.name)}
+                      className="px-3 py-1 text-xs font-semibold text-white bg-red-500 rounded hover:bg-red-600 transition"
+                      title="Delete project"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </motion.div>
+
         <form
           onSubmit={handleSubmit}
           className="flex flex-col gap-4 bg-transparent"
@@ -168,11 +407,11 @@ export default function TeacherAssistant() {
               <button
                 type="submit"
                 className={`rounded px-4 py-2 font-semibold shadow transition mt-1 mb-0 relative min-w-[180px] ${
-                  !testDescription
+                  !testDescription || !selectedProject
                     ? "bg-slate-200 text-gray-400 cursor-not-allowed"
                     : "bg-blue text-white cursor-pointer hover:scale-95 active:scale-90"
                 }`}
-                disabled={loading || !testDescription}
+                disabled={loading || !testDescription || !selectedProject}
               >
                 {loading
                   ? progress !== null
@@ -181,9 +420,9 @@ export default function TeacherAssistant() {
                   : "Generate test"}
               </button>
               {/* Tooltip for missing fields - only when button is disabled and hovered */}
-              {!testDescription && (
+              {(!testDescription || !selectedProject) && (
                 <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-1 rounded bg-gray-800 text-white text-xs whitespace-nowrap shadow-lg z-50 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
-                  {"Please provide a description."}
+                  {!selectedProject ? "Please select a project." : "Please provide a description."}
                 </span>
               )}
             </div>

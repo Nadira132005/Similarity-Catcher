@@ -3,29 +3,44 @@ def generate_test_with_modified_problems(problems):
     Generates a student/scholar test using only the problems provided by the user, with numbers slightly changed for each problem.
     """
     prompt = f"""
-    You are an expert educator and test designer. Given the following list of problems, generate a test for students or scholars using only these problems, but change the numbers in each problem slightly to create new versions. Organize the test with easy, medium, and hard sections, and provide a grading rubric for each level.
+    You are an expert educator and test designer. Your task is to generate a comprehensive test for students based ONLY on the problems provided below.
 
-    PROBLEMS:
+    INSTRUCTIONS:
+    1. Read and analyze all the problems provided below carefully
+    2. Select the most relevant and appropriate problems for a test
+    3. Create variations of these problems by changing numbers, values, or contexts slightly
+    4. Organize the test into sections: Easy (30%), Medium (50%), Hard (20%)
+    5. Each section should contain 3-5 problems
+    6. Provide clear instructions for students
+    7. Include a grading rubric with point distribution
+
+    PROBLEMS FROM DATABASE:
     {problems}
 
-    Respond with:
-    1. A test with modified problems for each grading level (easy, medium, hard).
-    2. A grading rubric for each level.
+    GENERATE A COMPLETE TEST WITH:
+    - Test title and instructions
+    - Section 1: Easy Problems (30% of grade)
+    - Section 2: Medium Problems (50% of grade)
+    - Section 3: Hard Problems (20% of grade)
+    - Grading rubric with point values for each problem
+    - Total points should equal 100
+
+    Important: Base your test ONLY on the problems provided above. Modify numbers and contexts but keep the problem types similar.
     """
     try:
         response = client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an expert educator and test designer. Generate tests and grading rubrics using only the provided problems, with numbers changed.",
+                    "content": "You are an expert educator and test designer. Generate comprehensive tests with clear structure, varied difficulty levels, and detailed grading rubrics based on the provided problems.",
                 },
                 {
                     "role": "user",
                     "content": prompt,
                 }
             ],
-            max_tokens=512,
-            temperature=0.3,
+            max_tokens=2048,  # Increased for longer, more detailed tests
+            temperature=0.5,  # Slightly higher for more creative problem variations
             top_p=1.0,
             frequency_penalty=0.0,
             presence_penalty=0.0,
