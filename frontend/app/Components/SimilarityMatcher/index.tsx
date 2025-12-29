@@ -6,7 +6,6 @@ import {
   SimilarityMatch,
 } from "../../../api/similarityMatcher";
 
-import MultiSelectDropdown from "../DropDowns/DropDown";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import MainBtn from "../Buttons/MainBtn";
@@ -19,13 +18,7 @@ const accent = "#00b5e2";
 
 const USER_ID = 1; // Placeholder user ID
 
-type SimilarityMatcherProps = {
-  projects: string[];
-};
-
-export default function SimilarityMatcher({
-  projects,
-}: SimilarityMatcherProps) {
+export default function SimilarityMatcher() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -41,12 +34,22 @@ export default function SimilarityMatcher({
   const [selectedResult, setSelectedResult] = useState<
     SimilarityMatch | undefined
   >(undefined);
-  const [aiSummary, setAiSummary] = useState<string>("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-
-  function handleSelectedChange(newSelected: string[]) {
-    setSelectedProjects(newSelected);
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.toLowerCase().endsWith('.csv')) {
+        setError({
+          message: "Please select a CSV file.",
+          status: true,
+          className: "bg-red-500",
+        });
+        return;
+      }
+      setSelectedFile(file);
+      setError({ message: "", status: false, className: "" });
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -55,7 +58,6 @@ export default function SimilarityMatcher({
     setResults([]);
     setProgress(0);
     setDone(false);
-    console.log(selectedProjects);
 
     if (!query) {
       setError({
@@ -66,9 +68,9 @@ export default function SimilarityMatcher({
       return;
     }
 
-    if (selectedProjects.length < 1) {
+    if (!selectedFile) {
       setError({
-        message: "Please select a project",
+        message: "Please upload a CSV file.",
         status: true,
         className: "bg-red-500",
       });
@@ -78,24 +80,49 @@ export default function SimilarityMatcher({
     setLoading(true);
 
     try {
-      const data = await compareQuery(query, USER_ID, selectedProjects);
+      // Step 1: Upload the CSV file and create a temporary project
+      const projectName = `temp_project_${Date.now()}`;
+      const uploadFormData = new FormData();
+      uploadFormData.append("csv_file", selectedFile);
+      uploadFormData.append("project_name", projectName);
+
+      const uploadResponse = await fetch(
+        "http://localhost:8000/api/similarity-matcher/createProject",
+        {
+          method: "POST",
+          body: uploadFormData,
+        }
+      );
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.error || "Failed to upload CSV file");
+      }
+
+      setProgress(50);
+
+      // Step 2: Compare query against the uploaded project
+      const data = await compareQuery(query, USER_ID, [projectName]);
 
       if (data.top_matches) {
         setResults(data.top_matches);
         setDone(true);
-        setAiSummary(data.summary);
       } else if (data.request_id) {
         const status = await getStatus(data.request_id);
         setResults(status.top_matches || []);
-        setAiSummary(data.summary);
         setDone(true);
       } else {
         throw new Error("Unexpected response from server.");
       }
 
+      setProgress(100);
       console.log("Results:", data.top_matches || data);
     } catch (err: any) {
-      setError(err.message || "Unknown error occurred.");
+      setError({
+        message: err.message || "Unknown error occurred.",
+        status: true,
+        className: "bg-red-500",
+      });
     } finally {
       setLoading(false);
     }
@@ -186,35 +213,49 @@ export default function SimilarityMatcher({
             className="flex flex-row gap-2 items-end"
           >
             <div className="flex flex-col gap-1 flex-1">
-              <div className="flex  justify-between items-end gap-2">
-                <MultiSelectDropdown
-                  projects={projects}
-                  selectedOptions={selectedProjects}
-                  onSelectionChange={handleSelectedChange}
-                ></MultiSelectDropdown>
+              <label className="font-semibold text-sm text-blue">
+                Upload CSV File
+              </label>
+              <span className="text-xs text-gray-600 mb-1">
+                Select a CSV file containing previous inquiries.
+              </span>
+              <div className="relative">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="csv-file-input"
+                />
+                <label
+                  htmlFor="csv-file-input"
+                  className="block rounded px-4 py-2 font-semibold shadow cursor-pointer text-center bg-blue text-white hover:scale-95 active:scale-90 transition-transform duration-200"
+                >
+                  {selectedFile ? selectedFile.name : "Choose CSV File"}
+                </label>
               </div>
             </div>
             <div className="relative group">
               <button
                 type="submit"
                 className={`rounded px-4 py-2 font-semibold shadow transition mt-1 mb-0 relative min-w-[180px] ${
-                  !selectedProjects || !query
+                  !selectedFile || !query
                     ? "bg-slate-200 text-gray-400 cursor-not-allowed"
                     : `bg-blue text-white cursor-pointer hover:scale-95 active:scale-90 ${
                         loading ? "animate-pulse" : ""
                       }`
                 }`}
-                disabled={loading || !selectedProjects || !query}
+                disabled={loading || !selectedFile || !query}
               >
                 {loading ? `Comparing...` : "Find Top 5 Matches"}
               </button>
               {/* Tooltip for missing fields - only when button is disabled and hovered */}
-              {(!selectedProjects || !query) && (
+              {(!selectedFile || !query) && (
                 <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-1 rounded bg-gray-800 text-white text-xs whitespace-nowrap shadow-lg z-50 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
-                  {!selectedProjects && !query
-                    ? "Please provide both a project name and a new inquiry."
-                    : !selectedProjects
-                    ? "Please provide a project name."
+                  {!selectedFile && !query
+                    ? "Please upload a CSV file and provide a new inquiry."
+                    : !selectedFile
+                    ? "Please upload a CSV file."
                     : "Please provide a new inquiry."}
                 </span>
               )}
@@ -228,15 +269,8 @@ export default function SimilarityMatcher({
             transition={{ duration: 0.5, type: "spring" }}
             className="mt-16"
           >
-            <h2 className="mb-2 text-center"> ✨ AI Generated Summary </h2>
-            <div
-              style={{ whiteSpace: "pre-wrap" }}
-              className="mb-6 bg-white p-4 rounded-lg shadow"
-            >
-              {aiSummary}
-            </div>
             <h2
-              className="text-lg font-semibold mb-2 text-center"
+              className="text-lg font-semibold mb-4 text-center"
               style={{ color: blue }}
             >
               Top 5 Matches
@@ -246,26 +280,16 @@ export default function SimilarityMatcher({
                 <li
                   onClick={() => handleOpenModal(r)}
                   key={i}
-                  className="rounded-xl p-4 shadow-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors"
+                  className="rounded-xl p-4 shadow-md flex flex-col gap-2 bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors"
                 >
-                  <div className="flex-1">
-                    <p className="text-sm text-blue font-semibold break-words line-clamp-3">
-                      {r.metadata?.summary}
-                    </p>
-
-                    {r.metadata?.created_date && (
-                      <p className="text-xs text-gray-500 mt-2">
-                        Created: {r.metadata.created_date}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-700 break-words whitespace-pre-wrap">
+                        {r.content}
                       </p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col sm:items-end text-right">
-                    <span className="text-sm text-blue font-bold">
-                      Match: {Number(r.match * 100).toFixed(2) || "N/A"}%
-                    </span>
-                    <span className="text-xs font-medium text-black">
-                      Project Name: {r.project_name}
+                    </div>
+                    <span className="text-lg text-blue font-bold whitespace-nowrap">
+                      {Number(r.match * 100).toFixed(2)}%
                     </span>
                   </div>
                 </li>
@@ -280,63 +304,47 @@ export default function SimilarityMatcher({
               {/* Header */}
               <div className="border-b border-gray-200 pb-4">
                 <h1 className="text-3xl font-bold text-blue mb-2">
-                  Inquiry Details
+                  Match Details
                 </h1>
-                <div className="flex items-start gap-2 flex-col">
-                  <span className="text-sm text-gray-500">
-                    Created: {selectedResult.metadata?.created_date}
-                  </span>
-                  <span className="px-3 py-1 bg-accent text-white rounded text-sm font-semibold">
-                    {Number(selectedResult.match * 100).toFixed(2) || "N/A"}%
-                    Match
-                  </span>
+                <span className="px-3 py-1 bg-accent text-white rounded text-sm font-semibold">
+                  {Number(selectedResult.match * 100).toFixed(2)}% Match
+                </span>
+              </div>
+
+              <div>
+                <h2 className="text-xl font-semibold text-blue mb-3">
+                  Your Inquiry
+                </h2>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-gray-800 leading-relaxed">{query}</p>
                 </div>
               </div>
 
               <div>
                 <h2 className="text-xl font-semibold text-blue mb-3">
-                  Summary
+                  Matched Entry from CSV
                 </h2>
-                <p className="text-gray-800 leading-relaxed">
-                  {Object.entries(selectedResult.metadata || {}).map(
-                    ([key, value]) => (
-                      <span key={key} className="block">
-                        <strong>{key}:</strong> {value}
-                      </span>
-                    )
-                  )}
-                </p>
-              </div>
-
-              <div>
-                <h2 className="text-xl font-semibold text-blue mb-3">
-                  Inquiry
-                </h2>
-                <p className="text-gray-800 leading-relaxed">{query}</p>
-              </div>
-
-              <div>
-                <h2 className="text-xl font-semibold text-blue mb-3">
-                  Description
-                </h2>
-                <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="bg-blue-50 p-4 rounded-lg">
                   <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
-                    {selectedResult.metadata?.description}
+                    {selectedResult.content}
                   </p>
                 </div>
               </div>
 
-              <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue">
-                <h3 className="font-semibold text-blue mb-1">
-                  Project Information
-                </h3>
-                <p className="text-gray-700">
-                  <strong>Project Name:</strong> {selectedResult.project_name}
-                </p>
-                <p className="text-gray-700">
-                  <strong>Inquiry ID:</strong> {selectedResult.id}
-                </p>
-              </div>
+              {selectedResult.metadata && Object.keys(selectedResult.metadata).length > 0 && (
+                <div>
+                  <h2 className="text-xl font-semibold text-blue mb-3">
+                    Additional Information
+                  </h2>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    {Object.entries(selectedResult.metadata).map(([key, value]) => (
+                      <p key={key} className="text-gray-700 mb-1">
+                        <strong className="text-blue">{key}:</strong> {value}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </Modal>

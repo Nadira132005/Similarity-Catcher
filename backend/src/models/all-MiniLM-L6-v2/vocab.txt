@@ -3275,7 +3275,7 @@ studied
 computer
 figure
 relationship
-inquiry
+issue
 significant
 loss
 die
@@ -3312,7 +3312,7 @@ comes
 appearance
 joseph
 double
-query
+issues
 musical
 companies
 castle
@@ -14093,7 +14093,7 @@ concealed
 inferior
 abdullah
 residences
-tquery
+tissues
 vengeance
 ##ided
 moisture

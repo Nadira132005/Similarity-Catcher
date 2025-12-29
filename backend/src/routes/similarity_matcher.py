@@ -38,20 +38,34 @@ class ApiRoutes:
         similarity_matcher_api.route('/list_uploaded_csvs', methods=['GET'])(self.list_uploaded_csvs)
         similarity_matcher_api.route('/download_uploaded_csv/<filename>', methods=['GET'])(self.download_uploaded_csv)
         similarity_matcher_api.route('/authenticate', methods=['POST'])(self.authenticate)
+        similarity_matcher_api.route('/test-openrouter', methods=['GET'])(self.test_openrouter)
 
         app.register_blueprint(similarity_matcher_api)
 
     def create_project(self):
         """Endpoint to create a new project from a CSV file."""
         try:
-            if 'csv_file' not in request.files or 'project_name' not in request.form:
-                return jsonify({"error": "Missing 'csv_file' or 'project_name'"}), 400
+            import logging
+            logging.info(f"Received createProject request. Files: {list(request.files.keys())}, Form: {list(request.form.keys())}")
+
+            if 'csv_file' not in request.files:
+                return jsonify({"error": "Missing 'csv_file' in request"}), 400
+
+            if 'project_name' not in request.form:
+                return jsonify({"error": "Missing 'project_name' in request"}), 400
 
             csv_file = request.files['csv_file']
             project_name = request.form['project_name'].strip()
 
-            if not csv_file.filename or not project_name:
-                return jsonify({"error": "Empty filename or project name"}), 400
+            if not csv_file.filename:
+                return jsonify({"error": "No file selected"}), 400
+
+            if not project_name:
+                return jsonify({"error": "Project name cannot be empty"}), 400
+
+            # Validate file extension
+            if not csv_file.filename.lower().endswith('.csv'):
+                return jsonify({"error": "Only CSV files are supported"}), 400
 
             # Save uploaded file
             upload_dir = os.path.join(os.getcwd(), 'resources', 'uploads')
@@ -60,20 +74,24 @@ class ApiRoutes:
             filename = secure_filename(csv_file.filename)
             file_path = os.path.join(upload_dir, filename)
 
-            if not os.path.exists(file_path):
-                csv_file.save(file_path)
+            # Always save the file (overwrite if exists)
+            csv_file.save(file_path)
+            logging.info(f"File saved to: {file_path}")
 
             # Load data into Chroma
             added_docs = load_csv_to_chroma(file_path, project_name)
             added_count = len(added_docs) if added_docs else 0
 
             return jsonify({
-                "message": f"Project '{project_name}' created.",
-                "added_documents": added_count
-            })
+                "message": f"Project '{project_name}' created successfully.",
+                "added_documents": added_count,
+                "project_name": project_name
+            }), 200
 
         except Exception as e:
-            return jsonify({"error": str(e)}), 500
+            import logging
+            logging.exception(f"Error in create_project: {e}")
+            return jsonify({"error": f"Failed to create project: {str(e)}"}), 500
                    ## save chrom db project name as db file name 
                     ## if the db already exists, return an error
                     ## if the db already exists, but with diferent name add error
@@ -87,11 +105,11 @@ class ApiRoutes:
         """
         Endpoint to authenticate a user.
         This is a placeholder for actual authentication logic.
-        
+
         Returns:
             tuple: (response_json, http_status_code)
 
-            
+
         """
 
         data = request.get_json()
@@ -99,11 +117,61 @@ class ApiRoutes:
         if not data or 'message' not in data:
             from flask import jsonify
             return jsonify({"error": "Missing 'message' in JSON"}), 400
-        
+
         if data['message'].lower() != 'log in':
             return jsonify({"error": "Invalid message content"}), 400
 
         return {"id":11,"name":"Raul"}, 200
+
+    def test_openrouter(self):
+        """
+        Test endpoint to check if OpenRouter API is working.
+
+        Returns:
+            tuple: (response_json, http_status_code)
+        """
+        try:
+            from llm import client, openrouter_model
+            import os
+
+            # Check if API key is set
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            if not api_key:
+                return jsonify({
+                    "status": "error",
+                    "message": "OpenRouter API key not configured",
+                    "working": False
+                }), 200
+
+            # Make a simple test request
+            response = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "Say 'OK' if you can read this."
+                    }
+                ],
+                max_tokens=10,
+                temperature=0,
+                model=openrouter_model
+            )
+
+            result = response.choices[0].message.content.strip()
+
+            return jsonify({
+                "status": "success",
+                "message": "OpenRouter is working!",
+                "working": True,
+                "model": openrouter_model,
+                "test_response": result
+            }), 200
+
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": f"OpenRouter test failed: {str(e)}",
+                "working": False
+            }), 200
 
 
     def compare_query(self):

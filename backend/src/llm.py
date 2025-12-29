@@ -84,7 +84,8 @@ print(f"OpenRouter Token Loaded: {'Yes' if openrouter_token else 'No'}")
 
 # Use OpenRouter endpoint and model
 openrouter_endpoint = "https://openrouter.ai/api/v1"
-openrouter_model = "deepseek/deepseek-chat-v3.1:free"
+# Using Meta's Llama 3.2 3B - free and stable model
+openrouter_model = "meta-llama/llama-3.2-3b-instruct:free"
 proxy_url = os.getenv("PROXY_URL")
 
 client = OpenAI(
@@ -130,6 +131,84 @@ def ask_llm(prompt):
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"[ERROR] OpenRouter request failed: {e}"
+
+def calculate_semantic_similarity(query, matches):
+    """
+    Uses LLM to calculate more accurate semantic similarity percentages.
+    Returns a dict mapping match content to refined percentage.
+    """
+    import re
+    try:
+        # Build the comparison text
+        matches_text = "\n\n".join([
+            f"Match {i+1}:\n{match.get('content', '')}"
+            for i, match in enumerate(matches)
+        ])
+
+        prompt = f"""You are a semantic similarity expert. Compare this query against each match and provide a similarity percentage (0-100%) for each based on semantic meaning.
+
+Query:
+{query}
+
+Matches:
+{matches_text}
+
+IMPORTANT:
+- Give varied percentages from 0-100%
+- 80-100%: Nearly identical meaning
+- 60-79%: Similar topic, related concepts
+- 40-59%: Same general domain
+- 20-39%: Some connection
+- 0-19%: Unrelated
+
+Respond with ONLY numbers in this exact format:
+Match 1: XX%
+Match 2: XX%
+Match 3: XX%
+Match 4: XX%
+Match 5: XX%"""
+
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a semantic similarity analyzer. Respond ONLY with percentages in the exact format requested.",
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            max_tokens=150,
+            temperature=0.1,
+            model=openrouter_model
+        )
+
+        result_text = response.choices[0].message.content.strip()
+
+        # Parse percentages from response
+        percentages = []
+        for line in result_text.split('\n'):
+            match = re.search(r'(\d+)%', line)
+            if match:
+                percentages.append(float(match.group(1)) / 100.0)
+
+        # Map percentages back to matches
+        refined_matches = {}
+        for i, match in enumerate(matches):
+            if i < len(percentages):
+                refined_matches[match.get('content', '')] = percentages[i]
+            else:
+                # Fallback to original if parsing failed
+                refined_matches[match.get('content', '')] = match.get('match', 0)
+
+        return refined_matches
+
+    except Exception as e:
+        import logging
+        logging.warning(f"LLM similarity calculation failed: {e}, using original scores")
+        # Return original scores as fallback
+        return {match.get('content', ''): match.get('match', 0) for match in matches}
 
 def summary_generator(input_text, entries):
     try:

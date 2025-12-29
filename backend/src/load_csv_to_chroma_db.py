@@ -1,10 +1,15 @@
 import csv
 import hashlib
+import os
 from chroma_instance import get_chroma_client
 from sentence_transformers import SentenceTransformer
 
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(SCRIPT_DIR, "models", "all-MiniLM-L6-v2")
+
 chroma_client = get_chroma_client()
-embedding_model = SentenceTransformer("models/all-MiniLM-L6-v2")
+embedding_model = SentenceTransformer(MODEL_PATH)
 
 def make_id(text):
     return hashlib.md5(text.encode('utf-8')).hexdigest()

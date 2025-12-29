@@ -8,9 +8,11 @@ import os
 from llm import ask_llm
 from functools import reduce
 
-model_dir = os.path.abspath(os.path.join(os.getcwd(), 'models', 'all-MiniLM-L6-v2'))
+# Get the directory where the src folder is located (parent of routes)
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+model_dir = os.path.join(SCRIPT_DIR, 'models', 'all-MiniLM-L6-v2')
 model = SentenceTransformer(model_dir)
-chroma_db_dir = os.path.abspath(os.path.join(os.getcwd(), 'chroma_db'))
+chroma_db_dir = os.path.join(SCRIPT_DIR, 'chroma_db')
 # Use shared model directory
 chroma_client = chromadb.PersistentClient(path=chroma_db_dir, settings=Settings(anonymized_telemetry=False))
 

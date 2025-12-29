@@ -1,3 +1,4 @@
+import os
 from chromadb.config import Settings
 
 class ChromaClient:
@@ -6,7 +7,10 @@ class ChromaClient:
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             from chromadb import PersistentClient
-            cls._instance = PersistentClient(path="./database",settings=Settings(anonymized_telemetry=False), *args, **kwargs)
+            # Get the directory where this script is located
+            SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+            DB_PATH = os.path.join(SCRIPT_DIR, "database")
+            cls._instance = PersistentClient(path=DB_PATH, settings=Settings(anonymized_telemetry=False), *args, **kwargs)
         return cls._instance
 
 

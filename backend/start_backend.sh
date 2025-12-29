@@ -1,20 +1,25 @@
 #!/bin/bash
 set -e
 
-# Change to backend directory
-cd "$(dirname "$0")/src"
+# Change to backend directory (in case script is run from elsewhere)
+cd "$(dirname "$0")"
 
-# Activate venv
-if [ -f "backend_venv/Scripts/activate" ]; then
-    source backend_venv/Scripts/activate
+# Activate venv if it exists, otherwise create it
+if [ -d "backend_venv" ]; then
+    echo "Activating virtual environment..."
+    source backend_venv/bin/activate
 else
-    python -m venv backend_venv
-    source backend_venv/Scripts/activate
+    echo "Creating virtual environment..."
+    python3 -m venv backend_venv
+    source backend_venv/bin/activate
+    echo "Installing dependencies..."
     pip install -r requirements.txt
 fi
 
-export FLASK_APP=main.py
+# Set environment variables
+export FLASK_APP=src/main.py
 export FLASK_ENV=development
-export PYTHONPATH=./src 
+export PYTHONPATH=$(pwd)/src
 
-flask run --host=0.0.0.0 --port=8000
+echo "Starting backend server on http://localhost:8000"
+python src/main.py

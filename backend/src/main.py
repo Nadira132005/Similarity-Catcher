@@ -17,7 +17,19 @@ from routes.similarity_matcher import ApiRoutes as ApiRoutesSimilarityMatcher
 
 # Create the Flask application
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes and origins
+
+# Configure file uploads
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
+app.config['UPLOAD_FOLDER'] = 'uploads'
+
+# Enable CORS for all routes and origins with file upload support
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Admin-Key"]
+    }
+})
 
 # --- Multi-User, Slow-Endpoint Safe Backend Design ---
 # We use a thread-safe queue to buffer incoming requests, and a background worker thread
